@@ -4,13 +4,14 @@ Provides various authentication policies.
 from __future__ import unicode_literals
 
 import base64
+import binascii
 
 from django.contrib.auth import authenticate, get_user_model
 from django.middleware.csrf import CsrfViewMiddleware
+from django.utils.six import text_type
 from django.utils.translation import ugettext_lazy as _
 
 from rest_framework import HTTP_HEADER_ENCODING, exceptions
-from rest_framework.authtoken.models import Token
 
 
 def get_authorization_header(request):
@@ -20,7 +21,7 @@ def get_authorization_header(request):
     Hide some test client ickyness where the header can be unicode.
     """
     auth = request.META.get('HTTP_AUTHORIZATION', b'')
-    if isinstance(auth, type('')):
+    if isinstance(auth, text_type):
         # Work around django test client oddness
         auth = auth.encode(HTTP_HEADER_ENCODING)
     return auth
@@ -77,7 +78,7 @@ class BasicAuthentication(BaseAuthentication):
 
         try:
             auth_parts = base64.b64decode(auth[1]).decode(HTTP_HEADER_ENCODING).partition(':')
-        except (TypeError, UnicodeDecodeError):
+        except (TypeError, UnicodeDecodeError, binascii.Error):
             msg = _('Invalid basic header. Credentials not correctly base64 encoded.')
             raise exceptions.AuthenticationFailed(msg)
 
@@ -149,7 +150,15 @@ class TokenAuthentication(BaseAuthentication):
         Authorization: Token 401f7ac837da42b97f613d789819ff93537bee6a
     """
 
-    model = Token
+    keyword = 'Token'
+    model = None
+
+    def get_model(self):
+        if self.model is not None:
+            return self.model
+        from rest_framework.authtoken.models import Token
+        return Token
+
     """
     A custom token model may be used, but must have the following properties.
 
@@ -160,7 +169,7 @@ class TokenAuthentication(BaseAuthentication):
     def authenticate(self, request):
         auth = get_authorization_header(request).split()
 
-        if not auth or auth[0].lower() != b'token':
+        if not auth or auth[0].lower() != self.keyword.lower().encode():
             return None
 
         if len(auth) == 1:
@@ -179,9 +188,10 @@ class TokenAuthentication(BaseAuthentication):
         return self.authenticate_credentials(token)
 
     def authenticate_credentials(self, key):
+        model = self.get_model()
         try:
-            token = self.model.objects.select_related('user').get(key=key)
-        except self.model.DoesNotExist:
+            token = model.objects.select_related('user').get(key=key)
+        except model.DoesNotExist:
             raise exceptions.AuthenticationFailed(_('Invalid token.'))
 
         if not token.user.is_active:
@@ -190,4 +200,25 @@ class TokenAuthentication(BaseAuthentication):
         return (token.user, token)
 
     def authenticate_header(self, request):
-        return 'Token'
+        return self.keyword
+
+
+class RemoteUserAuthentication(BaseAuthentication):
+    """
+    REMOTE_USER authentication.
+
+    To use this, set up your web server to perform authentication, which will
+    set the REMOTE_USER environment variable. You will need to have
+    'django.contrib.auth.backends.RemoteUserBackend in your
+    AUTHENTICATION_BACKENDS setting
+    """
+
+    # Name of request header to grab username from.  This will be the key as
+    # used in the request.META dictionary, i.e. the normalization of headers to
+    # all uppercase and the addition of "HTTP_" prefix apply.
+    header = "REMOTE_USER"
+
+    def authenticate(self, request):
+        user = authenticate(remote_user=request.META.get(self.header))
+        if user and user.is_active:
+            return (user, None)

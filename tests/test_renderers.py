@@ -5,17 +5,22 @@ import json
 import re
 from collections import MutableMapping, OrderedDict
 
+import pytest
 from django.conf.urls import include, url
 from django.core.cache import cache
 from django.db import models
-from django.test import TestCase
+from django.http.request import HttpRequest
+from django.test import TestCase, override_settings
 from django.utils import six
+from django.utils.safestring import SafeText
 from django.utils.translation import ugettext_lazy as _
 
 from rest_framework import permissions, serializers, status
 from rest_framework.renderers import (
-    BaseRenderer, BrowsableAPIRenderer, HTMLFormRenderer, JSONRenderer
+    AdminRenderer, BaseRenderer, BrowsableAPIRenderer,
+    HTMLFormRenderer, JSONRenderer, StaticHTMLRenderer
 )
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.settings import api_settings
 from rest_framework.test import APIRequestFactory
@@ -103,6 +108,7 @@ class HTMLView1(APIView):
     def get(self, request, **kwargs):
         return Response('text')
 
+
 urlpatterns = [
     url(r'^.*\.(?P<format>.+)$', MockView.as_view(renderer_classes=[RendererA, RendererB])),
     url(r'^$', MockView.as_view(renderer_classes=[RendererA, RendererB])),
@@ -147,13 +153,11 @@ class DocumentingRendererTests(TestCase):
         self.assertContains(response, '>PATCH<')
 
 
+@override_settings(ROOT_URLCONF='tests.test_renderers')
 class RendererEndToEndTests(TestCase):
     """
     End-to-end testing of renderers using an RendererMixin on a generic view.
     """
-
-    urls = 'tests.test_renderers'
-
     def test_default_renderer_serializes_content(self):
         """If the Accept header is not set the default renderer should serialize the response."""
         resp = self.client.get('/')
@@ -239,7 +243,7 @@ class RendererEndToEndTests(TestCase):
         """
         Regression test for #1196
 
-        https://github.com/tomchristie/django-rest-framework/issues/1196
+        https://github.com/encode/django-rest-framework/issues/1196
         """
         resp = self.client.get('/empty')
         self.assertEqual(resp.get('Content-Type', None), None)
@@ -270,6 +274,18 @@ def strip_trailing_whitespace(content):
     return re.sub(' +\n', '\n', content)
 
 
+class BaseRendererTests(TestCase):
+    """
+    Tests BaseRenderer
+    """
+    def test_render_raise_error(self):
+        """
+        BaseRenderer.render should raise NotImplementedError
+        """
+        with pytest.raises(NotImplementedError):
+            BaseRenderer().render('test')
+
+
 class JSONRendererTests(TestCase):
     """
     Tests specific to the JSON Renderer
@@ -287,14 +303,14 @@ class JSONRendererTests(TestCase):
         qs = DummyTestModel.objects.values('id', 'name')
         ret = JSONRenderer().render(qs)
         data = json.loads(ret.decode('utf-8'))
-        self.assertEquals(data, [{'id': o.id, 'name': o.name}])
+        self.assertEqual(data, [{'id': o.id, 'name': o.name}])
 
     def test_render_queryset_values_list(self):
         o = DummyTestModel.objects.create(name='dummy')
         qs = DummyTestModel.objects.values_list('id', 'name')
         ret = JSONRenderer().render(qs)
         data = json.loads(ret.decode('utf-8'))
-        self.assertEquals(data, [[o.id, o.name]])
+        self.assertEqual(data, [[o.id, o.name]])
 
     def test_render_dict_abc_obj(self):
         class Dict(MutableMapping):
@@ -324,7 +340,7 @@ class JSONRendererTests(TestCase):
         x[2] = 3
         ret = JSONRenderer().render(x)
         data = json.loads(ret.decode('utf-8'))
-        self.assertEquals(data, {'key': 'string value', '2': 3})
+        self.assertEqual(data, {'key': 'string value', '2': 3})
 
     def test_render_obj_with_getitem(self):
         class DictLike(object):
@@ -396,13 +412,11 @@ class AsciiJSONRendererTests(TestCase):
 
 
 # Tests for caching issue, #346
+@override_settings(ROOT_URLCONF='tests.test_renderers')
 class CacheRenderTest(TestCase):
     """
     Tests specific to caching responses
     """
-
-    urls = 'tests.test_renderers'
-
     def test_head_caching(self):
         """
         Test caching of HEAD requests
@@ -459,3 +473,223 @@ class TestHiddenFieldHTMLFormRenderer(TestCase):
         field = serializer['published']
         rendered = renderer.render_field(field, {})
         assert rendered == ''
+
+
+class TestHTMLFormRenderer(TestCase):
+    def setUp(self):
+        class TestSerializer(serializers.Serializer):
+            test_field = serializers.CharField()
+
+        self.renderer = HTMLFormRenderer()
+        self.serializer = TestSerializer(data={})
+
+    def test_render_with_default_args(self):
+        self.serializer.is_valid()
+        renderer = HTMLFormRenderer()
+
+        result = renderer.render(self.serializer.data)
+
+        self.assertIsInstance(result, SafeText)
+
+    def test_render_with_provided_args(self):
+        self.serializer.is_valid()
+        renderer = HTMLFormRenderer()
+
+        result = renderer.render(self.serializer.data, None, {})
+
+        self.assertIsInstance(result, SafeText)
+
+
+class TestChoiceFieldHTMLFormRenderer(TestCase):
+    """
+    Test rendering ChoiceField with HTMLFormRenderer.
+    """
+
+    def setUp(self):
+        choices = ((1, 'Option1'), (2, 'Option2'), (12, 'Option12'))
+
+        class TestSerializer(serializers.Serializer):
+            test_field = serializers.ChoiceField(choices=choices,
+                                                 initial=2)
+
+        self.TestSerializer = TestSerializer
+        self.renderer = HTMLFormRenderer()
+
+    def test_render_initial_option(self):
+        serializer = self.TestSerializer()
+        result = self.renderer.render(serializer.data)
+
+        self.assertIsInstance(result, SafeText)
+
+        self.assertInHTML('<option value="2" selected>Option2</option>',
+                          result)
+        self.assertInHTML('<option value="1">Option1</option>', result)
+        self.assertInHTML('<option value="12">Option12</option>', result)
+
+    def test_render_selected_option(self):
+        serializer = self.TestSerializer(data={'test_field': '12'})
+
+        serializer.is_valid()
+        result = self.renderer.render(serializer.data)
+
+        self.assertIsInstance(result, SafeText)
+
+        self.assertInHTML('<option value="12" selected>Option12</option>',
+                          result)
+        self.assertInHTML('<option value="1">Option1</option>', result)
+        self.assertInHTML('<option value="2">Option2</option>', result)
+
+
+class TestMultipleChoiceFieldHTMLFormRenderer(TestCase):
+    """
+    Test rendering MultipleChoiceField with HTMLFormRenderer.
+    """
+
+    def setUp(self):
+        self.renderer = HTMLFormRenderer()
+
+    def test_render_selected_option_with_string_option_ids(self):
+        choices = (('1', 'Option1'), ('2', 'Option2'), ('12', 'Option12'),
+                   ('}', 'OptionBrace'))
+
+        class TestSerializer(serializers.Serializer):
+            test_field = serializers.MultipleChoiceField(choices=choices)
+
+        serializer = TestSerializer(data={'test_field': ['12']})
+        serializer.is_valid()
+
+        result = self.renderer.render(serializer.data)
+
+        self.assertIsInstance(result, SafeText)
+
+        self.assertInHTML('<option value="12" selected>Option12</option>',
+                          result)
+        self.assertInHTML('<option value="1">Option1</option>', result)
+        self.assertInHTML('<option value="2">Option2</option>', result)
+        self.assertInHTML('<option value="}">OptionBrace</option>', result)
+
+    def test_render_selected_option_with_integer_option_ids(self):
+        choices = ((1, 'Option1'), (2, 'Option2'), (12, 'Option12'))
+
+        class TestSerializer(serializers.Serializer):
+            test_field = serializers.MultipleChoiceField(choices=choices)
+
+        serializer = TestSerializer(data={'test_field': ['12']})
+        serializer.is_valid()
+
+        result = self.renderer.render(serializer.data)
+
+        self.assertIsInstance(result, SafeText)
+
+        self.assertInHTML('<option value="12" selected>Option12</option>',
+                          result)
+        self.assertInHTML('<option value="1">Option1</option>', result)
+        self.assertInHTML('<option value="2">Option2</option>', result)
+
+
+class StaticHTMLRendererTests(TestCase):
+    """
+    Tests specific for Static HTML Renderer
+    """
+    def setUp(self):
+        self.renderer = StaticHTMLRenderer()
+
+    def test_static_renderer(self):
+        data = '<html><body>text</body></html>'
+        result = self.renderer.render(data)
+        assert result == data
+
+    def test_static_renderer_with_exception(self):
+        context = {
+            'response': Response(status=500, exception=True),
+            'request': Request(HttpRequest())
+        }
+        result = self.renderer.render({}, renderer_context=context)
+        assert result == '500 Internal Server Error'
+
+
+class BrowsableAPIRendererTests(TestCase):
+
+    def setUp(self):
+        self.renderer = BrowsableAPIRenderer()
+
+    def test_get_description_returns_empty_string_for_401_and_403_statuses(self):
+        assert self.renderer.get_description({}, status_code=401) == ''
+        assert self.renderer.get_description({}, status_code=403) == ''
+
+    def test_get_filter_form_returns_none_if_data_is_not_list_instance(self):
+        class DummyView(object):
+            get_queryset = None
+            filter_backends = None
+
+        result = self.renderer.get_filter_form(data='not list',
+                                               view=DummyView(), request={})
+        assert result is None
+
+
+class AdminRendererTests(TestCase):
+
+    def setUp(self):
+        self.renderer = AdminRenderer()
+
+    def test_render_when_resource_created(self):
+        class DummyView(APIView):
+            renderer_classes = (AdminRenderer, )
+        request = Request(HttpRequest())
+        request.build_absolute_uri = lambda: 'http://example.com'
+        response = Response(status=201, headers={'Location': '/test'})
+        context = {
+            'view': DummyView(),
+            'request': request,
+            'response': response
+        }
+
+        result = self.renderer.render(data={'test': 'test'},
+                                      renderer_context=context)
+        assert result == ''
+        assert response.status_code == status.HTTP_303_SEE_OTHER
+        assert response['Location'] == 'http://example.com'
+
+    def test_render_dict(self):
+        factory = APIRequestFactory()
+
+        class DummyView(APIView):
+            renderer_classes = (AdminRenderer, )
+
+            def get(self, request):
+                return Response({'foo': 'a string'})
+        view = DummyView.as_view()
+        request = factory.get('/')
+        response = view(request)
+        response.render()
+        self.assertInHTML('<tr><th>Foo</th><td>a string</td></tr>', str(response.content))
+
+    def test_render_dict_with_items_key(self):
+        factory = APIRequestFactory()
+
+        class DummyView(APIView):
+            renderer_classes = (AdminRenderer, )
+
+            def get(self, request):
+                return Response({'items': 'a string'})
+
+        view = DummyView.as_view()
+        request = factory.get('/')
+        response = view(request)
+        response.render()
+        self.assertInHTML('<tr><th>Items</th><td>a string</td></tr>', str(response.content))
+
+    def test_render_dict_with_iteritems_key(self):
+        factory = APIRequestFactory()
+
+        class DummyView(APIView):
+            renderer_classes = (AdminRenderer, )
+
+            def get(self, request):
+                return Response({'iteritems': 'a string'})
+
+        view = DummyView.as_view()
+        request = factory.get('/')
+        response = view(request)
+        response.render()
+        self.assertInHTML('<tr><th>Iteritems</th><td>a string</td></tr>', str(response.content))

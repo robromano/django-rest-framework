@@ -8,13 +8,13 @@ import sys
 import pytest
 
 PYTEST_ARGS = {
-    'default': ['tests', '--tb=short', '-s'],
-    'fast': ['tests', '--tb=short', '-q', '-s'],
+    'default': ['tests', '--tb=short', '-s', '-rw'],
+    'fast': ['tests', '--tb=short', '-q', '-s', '-rw'],
 }
 
-FLAKE8_ARGS = ['rest_framework', 'tests', '--ignore=E501']
+FLAKE8_ARGS = ['rest_framework', 'tests']
 
-ISORT_ARGS = ['--recursive', '--check-only', 'rest_framework', 'tests']
+ISORT_ARGS = ['--recursive', '--check-only', '-o' 'uritemplate', '-p', 'tests', 'rest_framework', 'tests']
 
 sys.path.append(os.path.dirname(__file__))
 

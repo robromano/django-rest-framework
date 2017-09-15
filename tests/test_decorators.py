@@ -6,12 +6,13 @@ from rest_framework import status
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.decorators import (
     api_view, authentication_classes, parser_classes, permission_classes,
-    renderer_classes, throttle_classes
+    renderer_classes, schema, throttle_classes
 )
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
+from rest_framework.schemas import AutoSchema
 from rest_framework.test import APIRequestFactory
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
@@ -56,11 +57,11 @@ class DecoratorTestCase(TestCase):
 
         request = self.factory.get('/')
         response = view(request)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         request = self.factory.post('/')
         response = view(request)
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
     def test_calling_put_method(self):
 
@@ -70,11 +71,11 @@ class DecoratorTestCase(TestCase):
 
         request = self.factory.put('/')
         response = view(request)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         request = self.factory.post('/')
         response = view(request)
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
     def test_calling_patch_method(self):
 
@@ -84,11 +85,11 @@ class DecoratorTestCase(TestCase):
 
         request = self.factory.patch('/')
         response = view(request)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         request = self.factory.post('/')
         response = view(request)
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
     def test_renderer_classes(self):
 
@@ -99,16 +100,15 @@ class DecoratorTestCase(TestCase):
 
         request = self.factory.get('/')
         response = view(request)
-        self.assertTrue(isinstance(response.accepted_renderer, JSONRenderer))
+        assert isinstance(response.accepted_renderer, JSONRenderer)
 
     def test_parser_classes(self):
 
         @api_view(['GET'])
         @parser_classes([JSONParser])
         def view(request):
-            self.assertEqual(len(request.parsers), 1)
-            self.assertTrue(isinstance(request.parsers[0],
-                                       JSONParser))
+            assert len(request.parsers) == 1
+            assert isinstance(request.parsers[0], JSONParser)
             return Response({})
 
         request = self.factory.get('/')
@@ -119,9 +119,8 @@ class DecoratorTestCase(TestCase):
         @api_view(['GET'])
         @authentication_classes([BasicAuthentication])
         def view(request):
-            self.assertEqual(len(request.authenticators), 1)
-            self.assertTrue(isinstance(request.authenticators[0],
-                                       BasicAuthentication))
+            assert len(request.authenticators) == 1
+            assert isinstance(request.authenticators[0], BasicAuthentication)
             return Response({})
 
         request = self.factory.get('/')
@@ -136,7 +135,7 @@ class DecoratorTestCase(TestCase):
 
         request = self.factory.get('/')
         response = view(request)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_throttle_classes(self):
         class OncePerDayUserThrottle(UserRateThrottle):
@@ -149,7 +148,21 @@ class DecoratorTestCase(TestCase):
 
         request = self.factory.get('/')
         response = view(request)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         response = view(request)
-        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
+    def test_schema(self):
+        """
+        Checks CustomSchema class is set on view
+        """
+        class CustomSchema(AutoSchema):
+            pass
+
+        @api_view(['GET'])
+        @schema(CustomSchema())
+        def view(request):
+            return Response({})
+
+        assert isinstance(view.cls.schema, CustomSchema)

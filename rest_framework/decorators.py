@@ -15,8 +15,7 @@ from django.utils import six
 from rest_framework.views import APIView
 
 
-def api_view(http_method_names=None):
-
+def api_view(http_method_names=None, exclude_from_schema=False):
     """
     Decorator that converts a function-based view into an APIView subclass.
     Takes a list of allowed methods for the view as an argument.
@@ -56,6 +55,7 @@ def api_view(http_method_names=None):
             setattr(WrappedAPIView, method.lower(), handler)
 
         WrappedAPIView.__name__ = func.__name__
+        WrappedAPIView.__module__ = func.__module__
 
         WrappedAPIView.renderer_classes = getattr(func, 'renderer_classes',
                                                   APIView.renderer_classes)
@@ -72,6 +72,10 @@ def api_view(http_method_names=None):
         WrappedAPIView.permission_classes = getattr(func, 'permission_classes',
                                                     APIView.permission_classes)
 
+        WrappedAPIView.schema = getattr(func, 'schema',
+                                        APIView.schema)
+
+        WrappedAPIView.exclude_from_schema = exclude_from_schema
         return WrappedAPIView.as_view()
     return decorator
 
@@ -107,6 +111,13 @@ def throttle_classes(throttle_classes):
 def permission_classes(permission_classes):
     def decorator(func):
         func.permission_classes = permission_classes
+        return func
+    return decorator
+
+
+def schema(view_inspector):
+    def decorator(func):
+        func.schema = view_inspector
         return func
     return decorator
 

@@ -4,15 +4,14 @@ import base64
 import unittest
 
 from django.contrib.auth.models import Group, Permission, User
-from django.core.urlresolvers import ResolverMatch
 from django.db import models
 from django.test import TestCase
 
 from rest_framework import (
     HTTP_HEADER_ENCODING, authentication, generics, permissions, serializers,
-    status
+    status, views
 )
-from rest_framework.compat import guardian
+from rest_framework.compat import ResolverMatch, guardian, set_many
 from rest_framework.filters import DjangoObjectPermissionsFilter
 from rest_framework.routers import DefaultRouter
 from rest_framework.test import APIRequestFactory
@@ -24,6 +23,7 @@ factory = APIRequestFactory()
 class BasicSerializer(serializers.ModelSerializer):
     class Meta:
         model = BasicModel
+        fields = '__all__'
 
 
 class RootView(generics.ListCreateAPIView):
@@ -73,15 +73,15 @@ class ModelPermissionsIntegrationTests(TestCase):
     def setUp(self):
         User.objects.create_user('disallowed', 'disallowed@example.com', 'password')
         user = User.objects.create_user('permitted', 'permitted@example.com', 'password')
-        user.user_permissions = [
+        set_many(user, 'user_permissions', [
             Permission.objects.get(codename='add_basicmodel'),
             Permission.objects.get(codename='change_basicmodel'),
             Permission.objects.get(codename='delete_basicmodel')
-        ]
+        ])
         user = User.objects.create_user('updateonly', 'updateonly@example.com', 'password')
-        user.user_permissions = [
+        set_many(user, 'user_permissions', [
             Permission.objects.get(codename='change_basicmodel'),
-        ]
+        ])
 
         self.permitted_credentials = basic_auth_header('permitted', 'password')
         self.disallowed_credentials = basic_auth_header('disallowed', 'password')
@@ -200,6 +200,46 @@ class ModelPermissionsIntegrationTests(TestCase):
         response = empty_list_view(request, pk=1)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    def test_calling_method_not_allowed(self):
+        request = factory.generic('METHOD_NOT_ALLOWED', '/', HTTP_AUTHORIZATION=self.permitted_credentials)
+        response = root_view(request)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        request = factory.generic('METHOD_NOT_ALLOWED', '/1', HTTP_AUTHORIZATION=self.permitted_credentials)
+        response = instance_view(request, pk='1')
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_check_auth_before_queryset_call(self):
+        class View(RootView):
+            def get_queryset(_):
+                self.fail('should not reach due to auth check')
+        view = View.as_view()
+
+        request = factory.get('/', HTTP_AUTHORIZATION='')
+        response = view(request)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_queryset_assertions(self):
+        class View(views.APIView):
+            authentication_classes = [authentication.BasicAuthentication]
+            permission_classes = [permissions.DjangoModelPermissions]
+        view = View.as_view()
+
+        request = factory.get('/', HTTP_AUTHORIZATION=self.permitted_credentials)
+        msg = 'Cannot apply DjangoModelPermissions on a view that does not set `.queryset` or have a `.get_queryset()` method.'
+        with self.assertRaisesMessage(AssertionError, msg):
+            view(request)
+
+        # Faulty `get_queryset()` methods should trigger the above "view does not have a queryset" assertion.
+        class View(RootView):
+            def get_queryset(self):
+                return None
+        view = View.as_view()
+
+        request = factory.get('/', HTTP_AUTHORIZATION=self.permitted_credentials)
+        with self.assertRaisesMessage(AssertionError, 'View.get_queryset() returned None'):
+            view(request)
+
 
 class BasicPermModel(models.Model):
     text = models.CharField(max_length=100)
@@ -215,6 +255,7 @@ class BasicPermModel(models.Model):
 class BasicPermSerializer(serializers.ModelSerializer):
     class Meta:
         model = BasicPermModel
+        fields = '__all__'
 
 
 # Custom object-level permission, that includes 'view' permissions
@@ -236,6 +277,7 @@ class ObjectPermissionInstanceView(generics.RetrieveUpdateDestroyAPIView):
     authentication_classes = [authentication.BasicAuthentication]
     permission_classes = [ViewObjectPermissions]
 
+
 object_permissions_view = ObjectPermissionInstanceView.as_view()
 
 
@@ -244,6 +286,7 @@ class ObjectPermissionListView(generics.ListAPIView):
     serializer_class = BasicPermSerializer
     authentication_classes = [authentication.BasicAuthentication]
     permission_classes = [ViewObjectPermissions]
+
 
 object_permissions_list_view = ObjectPermissionListView.as_view()
 
@@ -383,6 +426,11 @@ class ObjectPermissionsIntegrationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertListEqual(response.data, [])
 
+    def test_cannot_method_not_allowed(self):
+        request = factory.generic('METHOD_NOT_ALLOWED', '/', HTTP_AUTHORIZATION=self.credentials['readonly'])
+        response = object_permissions_list_view(request)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
 
 class BasicPerm(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -427,6 +475,7 @@ class DeniedObjectView(PermissionInstanceView):
 
 class DeniedObjectViewWithDetail(PermissionInstanceView):
     permission_classes = (BasicObjectPermWithDetail,)
+
 
 denied_view = DeniedView.as_view()
 

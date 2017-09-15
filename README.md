@@ -3,6 +3,7 @@
 [![build-status-image]][travis]
 [![coverage-status-image]][codecov]
 [![pypi-version]][pypi]
+[![Gitter](https://badges.gitter.im/tomchristie/django-rest-framework.svg)](https://gitter.im/tomchristie/django-rest-framework?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 **Awesome web-browsable Web APIs.**
 
@@ -10,9 +11,24 @@ Full documentation for the project is available at [http://www.django-rest-frame
 
 ---
 
-**Note**: We have now released Django REST framework 3.3. For older codebases you may want to refer to the version 2.4.4 [source code][2.4-code], and [documentation][2.4-docs].
+# Funding
 
-For more details see the 3.3 [announcement][3.3-announcement] and [release notes][3.3-release-notes].
+REST framework is a *collaboratively funded project*. If you use
+REST framework commercially we strongly encourage you to invest in its
+continued development by **[signing up for a paid plan][funding]**.
+
+The initial aim is to provide a single full-time position on REST framework.
+*Every single sign-up makes a significant impact towards making that possible.*
+
+<p align="center">
+  <a href="http://jobs.rover.com/"><img src="https://raw.githubusercontent.com/encode/django-rest-framework/master/docs/img/premium/rover-readme.png"/></a>
+  <a href="https://getsentry.com/welcome/"><img src="https://raw.githubusercontent.com/encode/django-rest-framework/master/docs/img/premium/sentry-readme.png"/></a>
+  <a href="https://getstream.io/try-the-api/?utm_source=drf&utm_medium=banner&utm_campaign=drf"><img src="https://raw.githubusercontent.com/encode/django-rest-framework/master/docs/img/premium/stream-readme.png"/></a>
+  <a href="https://hello.machinalis.co.uk/"><img src="https://raw.githubusercontent.com/encode/django-rest-framework/master/docs/img/premium/machinalis-readme.png"/></a>
+  <a href="https://rollbar.com/"><img src="https://raw.githubusercontent.com/encode/django-rest-framework/master/docs/img/premium/rollbar-readme.png"/></a>
+</p>
+
+*Many thanks to all our [wonderful sponsors][sponsors], and in particular to our premium backers, [Rover](http://jobs.rover.com/), [Sentry](https://getsentry.com/welcome/), [Stream](https://getstream.io/?utm_source=drf&utm_medium=banner&utm_campaign=drf), [Machinalis](https://hello.machinalis.co.uk/), and [Rollbar](https://rollbar.com/).*
 
 ---
 
@@ -36,8 +52,8 @@ There is a live example API for testing purposes, [available here][sandbox].
 
 # Requirements
 
-* Python (2.7, 3.2, 3.3, 3.4, 3.5)
-* Django (1.7, 1.8, 1.9)
+* Python (2.7, 3.2, 3.3, 3.4, 3.5, 3.6)
+* Django (1.8, 1.9, 1.10, 1.11)
 
 # Installation
 
@@ -61,7 +77,9 @@ Startup up a new project like so...
     pip install django
     pip install djangorestframework
     django-admin.py startproject example .
-    ./manage.py syncdb
+    ./manage.py migrate
+    ./manage.py createsuperuser
+
 
 Now edit the `example/urls.py` module in your project:
 
@@ -153,19 +171,22 @@ You may also want to [follow the author on Twitter][twitter].
 
 # Security
 
-If you believe you’ve found something in Django REST framework which has security implications, please **do not raise the issue in a public forum**.
+If you believe you've found something in Django REST framework which has security implications, please **do not raise the issue in a public forum**.
 
 Send a description of the issue via email to [rest-framework-security@googlegroups.com][security-mail].  The project maintainers will then work with you to resolve any issues where required, prior to any public disclosure.
 
-[build-status-image]: https://secure.travis-ci.org/tomchristie/django-rest-framework.svg?branch=master
-[travis]: http://travis-ci.org/tomchristie/django-rest-framework?branch=master
-[coverage-status-image]: https://img.shields.io/codecov/c/github/tomchristie/django-rest-framework/master.svg
-[codecov]: http://codecov.io/github/tomchristie/django-rest-framework?branch=master
+[build-status-image]: https://secure.travis-ci.org/encode/django-rest-framework.svg?branch=master
+[travis]: http://travis-ci.org/encode/django-rest-framework?branch=master
+[coverage-status-image]: https://img.shields.io/codecov/c/github/encode/django-rest-framework/master.svg
+[codecov]: http://codecov.io/github/encode/django-rest-framework?branch=master
 [pypi-version]: https://img.shields.io/pypi/v/djangorestframework.svg
 [pypi]: https://pypi.python.org/pypi/djangorestframework
 [twitter]: https://twitter.com/_tomchristie
 [group]: https://groups.google.com/forum/?fromgroups#!forum/django-rest-framework
 [sandbox]: http://restframework.herokuapp.com/
+
+[funding]: https://fund.django-rest-framework.org/topics/funding/
+[sponsors]: https://fund.django-rest-framework.org/topics/funding/#our-sponsors
 
 [oauth1-section]: http://www.django-rest-framework.org/api-guide/authentication/#django-rest-framework-oauth
 [oauth2-section]: http://www.django-rest-framework.org/api-guide/authentication/#django-oauth-toolkit
@@ -181,7 +202,3 @@ Send a description of the issue via email to [rest-framework-security@googlegrou
 
 [docs]: http://www.django-rest-framework.org/
 [security-mail]: mailto:rest-framework-security@googlegroups.com
-[2.4-code]: https://github.com/tomchristie/django-rest-framework/tree/version-2.4.x
-[2.4-docs]: http://tomchristie.github.io/rest-framework-2-docs/
-[3.3-announcement]: http://www.django-rest-framework.org/topics/3.3-announcement/
-[3.3-release-notes]: http://www.django-rest-framework.org/topics/release-notes/#33x-series
